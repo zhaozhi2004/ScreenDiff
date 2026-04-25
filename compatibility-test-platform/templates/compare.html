@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}视觉对比 — {{ project.name }}{% endblock %}
+{% block page_title %}{{ project.name }} <span class="text-muted" style="font-size:14px; font-weight:400;">视觉对比</span>{% endblock %}
+
+{% block content %}
+<div class="content-area">
+
+  <!-- 操作区 -->
+  <div class="compare-toolbar">
+    <div class="toolbar-group">
+      <label>基线版本</label>
+      <select id="baselineSelect" class="form-input">
+        <option value="">— 选择基线 —</option>
+        {% for run in runs %}
+        <option value="{{ run.id }}">
+          #{{ run.id }} · {{ run.get_resolution() }} · {{ run.get_browser() }} · {{ run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else '' }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="toolbar-group">
+      <label>对比版本</label>
+      <select id="compareSelect" class="form-input">
+        <option value="">— 选择对比版本 —</option>
+        {% for run in runs %}
+        <option value="{{ run.id }}">
+          #{{ run.id }} · {{ run.get_resolution() }} · {{ run.get_browser() }} · {{ run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else '' }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="runCompare()">🔍 对比</button>
+  </div>
+
+  <!-- 差异结果 -->
+  <div id="compareResult" class="compare-result hidden">
+
+    <!-- 概览 -->
+    <div class="diff-summary-card">
+      <div class="diff-score-display" id="diffScoreDisplay">0.00%</div>
+      <div class="diff-score-label">视觉差异率</div>
+      <div class="diff-stats">
+        <div class="diff-stat">
+          <span class="diff-stat-num" id="diffPixels">0</span>
+          <span class="diff-stat-label">差异像素</span>
+        </div>
+        <div class="diff-stat">
+          <span class="diff-stat-num" id="totalPixels">0</span>
+          <span class="diff-stat-label">总像素</span>
+        </div>
+        <div class="diff-stat">
+          <span class="diff-stat-num" id="diffPercent">0.00%</span>
+          <span class="diff-stat-label">差异比例</span>
+        </div>
+      </div>
+      <div class="diff-bar-wrap">
+        <div class="diff-bar-fill" id="diffBarFill"></div>
+      </div>
+    </div>
+
+    <!-- 三图对比 -->
+    <div class="compare-grid">
+      <div class="compare-col">
+        <div class="compare-col-header">基线 <span id="baselineLabel"></span></div>
+        <div class="compare-img-wrap">
+          <img id="baselineImg" src="" alt="基线">
+        </div>
+      </div>
+      <div class="compare-col">
+        <div class="compare-col-header">当前 <span id="compareLabel"></span></div>
+        <div class="compare-img-wrap">
+          <img id="compareImg" src="" alt="对比">
+        </div>
+      </div>
+      <div class="compare-col">
+        <div class="compare-col-header">差异高亮 <span id="diffLabel"></span></div>
+        <div class="compare-img-wrap">
+          <img id="diffImg" src="" alt="差异">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 所有有基线的记录 -->
+  <div class="section-title" style="margin-top:40px;">所有可对比记录</div>
+  <div class="runs-table-wrap">
+    <table class="runs-table">
+      <thead>
+        <tr>
+          <th>#</th><th>分辨率</th><th>浏览器</th><th>差异率</th>
+          <th>基线</th><th>截图</th><th>差异图</th><th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td class="mono text-muted">{{ run.id }}</td>
+          <td class="mono">{{ run.get_resolution() }}</td>
+          <td><span class="browser-badge">{{ run.get_browser()[:2].upper() }}</span></td>
+          <td>
+            {% if run.diff_score is not none %}
+            <span class="diff-value {% if run.diff_score > 0.05 %}high{% elif run.diff_score > 0.01 %}mid{% endif %}">
+              {{ (run.diff_score * 100)|round(2) }}%
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{% if run.baseline_path %}✅{% else %}❌{% endif %}</td>
+          <td>
+            {% if run.screenshot_path %}
+            <button class="btn btn-xs btn-ghost" onclick="viewImg('/screenshots/', '{{ run.screenshot_path|screenshot_rel }}', '截图')">🖼</button>
+            {% endif %}
+          </td>
+          <td>
+            {% if run.diff_path %}
+            <button class="btn btn-xs btn-ghost" onclick="viewImg('/diffs/', '{{ run.diff_path|diff_rel }}', '差异图')">🔴</button>
+            {% else %}—{% endif %}
+          </td>
+          <td class="mono text-muted" style="font-size:11px;">{{ run.created_at.strftime('%m-%d %H:%M') if run.created_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 弹窗 -->
+<div id="imgModal" class="modal-overlay hidden">
+  <div class="modal modal-img">
+    <div class="modal-header">
+      <div class="modal-title" id="imgModalTitle">图片</div>
+      <button class="modal-close" onclick="document.getElementById('imgModal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex; justify-content:center; background:#111;">
+      <img id="imgModalContent" src="" style="max-width:100%; max-height:70vh;">
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function runCompare() {
+  const runA = document.getElementById('baselineSelect').value;
+  const runB = document.getElementById('compareSelect').value;
+  if (!runA || !runB) { showToast('请选择两个版本'); return; }
+  if (runA === runB) { showToast('请选择不同版本'); return; }
+
+  document.getElementById('compareResult').classList.remove('hidden');
+
+  // 先加载截图
+  Promise.all([
+    fetch(`/api/test-runs/${runA}`).then(r => r.json()),
+    fetch(`/api/test-runs/${runB}`).then(r => r.json())
+  ]).then(([a, b]) => {
+    document.getElementById('baselineImg').src = '/screenshots/' + a.screenshot_path;
+    document.getElementById('compareImg').src = '/screenshots/' + b.screenshot_path;
+    document.getElementById('baselineLabel').textContent = a.resolution + ' / ' + a.browser;
+    document.getElementById('compareLabel').textContent = b.resolution + ' / ' + b.browser;
+  });
+
+  // 再做差异对比
+  fetch(`/api/compare?run_a=${runA}&run_b=${runB}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { showToast(data.error); return; }
+      const pct = (data.score * 100).toFixed(2);
+      document.getElementById('diffScoreDisplay').textContent = pct + '%';
+      document.getElementById('diffPixels').textContent = data.diff_pixels.toLocaleString();
+      document.getElementById('totalPixels').textContent = data.total_pixels.toLocaleString();
+      document.getElementById('diffPercent').textContent = pct + '%';
+      const color = data.score > 0.05 ? '#EF4444' : data.score > 0.01 ? '#F59E0B' : '#10B981';
+      document.getElementById('diffScoreDisplay').style.color = color;
+      document.getElementById('diffBarFill').style.width = Math.min(data.score * 100, 100) + '%';
+      document.getElementById('diffBarFill').style.background = color;
+      document.getElementById('diffImg').src = '/diffs/' + data.diff_path;
+      document.getElementById('diffLabel').textContent = '差异率: ' + pct + '%';
+    });
+}
+
+function viewImg(prefix, relPath, title) {
+  document.getElementById('imgModalTitle').textContent = title;
+  document.getElementById('imgModalContent').src = prefix + relPath;
+  document.getElementById('imgModal').classList.remove('hidden');
+}
+</script>
+{% endblock %}

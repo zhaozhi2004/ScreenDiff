@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}兼容性测试平台{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+  <!-- 左侧导航 -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🧪</div>
+      <div class="brand-text">
+        <div class="brand-name">Compatibility</div>
+        <div class="brand-sub">测试平台</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
+        <span class="nav-icon">📋</span> 项目列表
+      </a>
+      <a href="{{ url_for('report', project_id=0) if false else '#' }}" class="nav-item {% if request.endpoint and 'report' in request.endpoint %}active{% endif %}"
+         onclick="showToast('请先选择一个项目')">
+        <span class="nav-icon">📊</span> 测试报告
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sys-info">
+        <span class="mono">v1.0.0</span>
+        <span class="mono">Python+Playwright</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title">{% block page_title %}项目列表{% endblock %}</div>
+      <div class="topbar-actions">{% block actions %}{% endblock %}</div>
+    </header>
+    <div class="content-body">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<!-- Toast 通知 -->
+<div id="toast" class="toast"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}项目列表 — 兼容性测试平台{% endblock %}
+{% block page_title %}项目列表{% endblock %}
+
+{% block actions %}
+<button class="btn btn-primary" onclick="openCreateModal()">+ 新建项目</button>
+{% endblock %}
+
+{% block content %}
+<div class="content-area">
+
+  <!-- 统计栏 -->
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-num" id="totalProjects">{{ projects|length }}</div>
+      <div class="stat-label">项目总数</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="totalConfigs">{{ projects|sum(attribute='config_count') }}</div>
+      <div class="stat-label">配置总数</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="totalRuns">{{ projects|sum(attribute='run_count') }}</div>
+      <div class="stat-label">测试总次数</div>
+    </div>
+  </div>
+
+  <!-- 项目网格 -->
+  {% if projects %}
+  <div class="project-grid">
+    {% for project in projects %}
+    <div class="project-card" data-id="{{ project.id }}">
+      <div class="project-card-header">
+        <div class="project-status-dot status-idle"></div>
+        <div class="project-name">{{ project.name }}</div>
+      </div>
+      <div class="project-url mono">{{ project.url }}</div>
+      {% if project.description %}
+      <div class="project-desc">{{ project.description }}</div>
+      {% endif %}
+      <div class="project-meta">
+        <span class="meta-tag">📐 {{ project.config_count }} 配置</span>
+        <span class="meta-tag">🧪 {{ project.run_count }} 次测试</span>
+      </div>
+      <div class="project-time mono">{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</div>
+      <div class="project-actions">
+        <button class="btn btn-sm btn-outline" onclick="openConfigModal({{ project.id }})">⚙ 配置</button>
+        <button class="btn btn-sm btn-primary" onclick="location.href='/project/{{ project.id }}'">▶ 运行测试</button>
+        <button class="btn btn-sm btn-ghost" onclick="location.href='/compare/{{ project.id }}'">🔍 对比</button>
+        <button class="btn btn-sm btn-ghost" onclick="location.href='/report/{{ project.id }}'">📊 报告</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProject({{ project.id }})">🗑</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🧪</div>
+    <div class="empty-title">还没有测试项目</div>
+    <div class="empty-desc">创建一个项目，开始你的第一个兼容性测试</div>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ 新建项目</button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 新建项目弹窗 -->
+<div id="createModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">新建测试项目</div>
+      <button class="modal-close" onclick="closeModal('createModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>项目名称 *</label>
+        <input type="text" id="projName" class="form-input" placeholder="例如：游戏官网首页">
+      </div>
+      <div class="form-group">
+        <label>测试 URL *</label>
+        <input type="url" id="projUrl" class="form-input" placeholder="https://example.com/game.html">
+      </div>
+      <div class="form-group">
+        <label>描述（可选）</label>
+        <textarea id="projDesc" class="form-input" rows="2" placeholder="简要描述测试目标"></textarea>
+      </div>
+      <div class="form-group">
+        <label>快速预设分辨率</label>
+        <div class="resolution-presets">
+          {% for res in default_resolutions[:6] %}
+          <label class="preset-chip">
+            <input type="checkbox" value="{{ res.width }}x{{ res.height }}" class="preset-check">
+            <span>{{ res.name.split(' (')[0] }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('createModal')">取消</button>
+      <button class="btn btn-primary" onclick="createProject()">创建项目</button>
+    </div>
+  </div>
+</div>
+
+<!-- 配置管理弹窗 -->
+<div id="configModal" class="modal-overlay hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title">管理测试配置</div>
+      <button class="modal-close" onclick="closeModal('configModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="configProjectId">
+      <div id="configList" class="config-list"></div>
+      <div class="divider"></div>
+      <div class="form-section-title">添加新配置</div>
+      <div class="config-add-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>分辨率</label>
+            <select id="addResolution" class="form-input" onchange="updateResolutionFields()">
+              <option value="">— 选择预设 —</option>
+              {% for res in default_resolutions %}
+              <option value="{{ res.width }}x{{ res.height }}" data-w="{{ res.width }}" data-h="{{ res.height }}" data-scale="{{ res.device_scale }}">{{ res.name }}</option>
+              {% endfor %}
+              <option value="custom">自定义</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>宽度 px</label>
+            <input type="number" id="addWidth" class="form-input" placeholder="1920">
+          </div>
+          <div class="form-group">
+            <label>高度 px</label>
+            <input type="number" id="addHeight" class="form-input" placeholder="1080">
+          </div>
+          <div class="form-group">
+            <label>设备倍率</label>
+            <input type="number" id="addScale" class="form-input" value="1" min="1" max="4">
+          </div>
+          <div class="form-group">
+            <label>浏览器</label>
+            <select id="addBrowser" class="form-input">
+              <option value="chromium">Chromium</option>
+              <option value="firefox">Firefox</option>
+              <option value="webkit">WebKit</option>
+            </select>
+          </div>
+          <div class="form-group" style="align-self: flex-end;">
+            <button class="btn btn-primary" onclick="addConfig()">+ 添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('configModal')">关闭</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DEFAULT_RESOLUTIONS = {{ default_resolutions|tojson }};
+
+function openCreateModal() {
+  document.getElementById('createModal').classList.remove('hidden');
+}
+
+function openConfigModal(projectId) {
+  document.getElementById('configProjectId').value = projectId;
+  document.getElementById('configModal').classList.remove('hidden');
+  loadConfigs(projectId);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+async function loadConfigs(projectId) {
+  const res = await fetch(`/api/projects/${projectId}/configs`);
+  const configs = await res.json();
+  const list = document.getElementById('configList');
+  if (configs.length === 0) {
+    list.innerHTML = '<div class="empty-hint">暂无配置，点击下方添加</div>';
+    return;
+  }
+  list.innerHTML = configs.map(c => `
+    <div class="config-row" data-id="${c.id}">
+      <span class="mono">${c.resolution}</span>
+      <span class="browser-badge">${c.browser.toUpperCase()}</span>
+      <span class="mono text-muted">${c.width}×${c.height} ×${c.device_scale}</span>
+      <span class="active-badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? '✅ 启用' : '⏸ 禁用'}</span>
+      <button class="btn btn-sm btn-danger" onclick="deleteConfig(${c.id}, ${projectId})">🗑</button>
+    </div>
+  `).join('');
+}
+
+function updateResolutionFields() {
+  const sel = document.getElementById('addResolution');
+  const opt = sel.options[sel.selectedIndex];
+  if (opt.value === 'custom') {
+    document.getElementById('addWidth').value = '';
+    document.getElementById('addHeight').value = '';
+    document.getElementById('addScale').value = '1';
+  } else if (opt.value) {
+    document.getElementById('addWidth').value = opt.dataset.w;
+    document.getElementById('addHeight').value = opt.dataset.h;
+    document.getElementById('addScale').value = opt.dataset.scale || '1';
+  }
+}
+
+async function addConfig() {
+  const projectId = document.getElementById('configProjectId').value;
+  const sel = document.getElementById('addResolution');
+  let width = document.getElementById('addWidth').value;
+  let height = document.getElementById('addHeight').value;
+  const scale = document.getElementById('addScale').value || '1';
+  const browser = document.getElementById('addBrowser').value;
+
+  if (!width || !height) { showToast('请输入宽度和高度'); return; }
+
+  const res = await fetch(`/api/projects/${projectId}/configs`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ width: parseInt(width), height: parseInt(height), device_scale: parseInt(scale), browser })
+  });
+  if (res.ok) { loadConfigs(projectId); showToast('配置已添加'); }
+  else { showToast('添加失败'); }
+}
+
+async function deleteConfig(configId, projectId) {
+  if (!confirm('确认删除此配置？')) return;
+  await fetch(`/api/projects/${projectId}/configs/${configId}`, { method: 'DELETE' });
+  loadConfigs(projectId);
+}
+
+async function createProject() {
+  const name = document.getElementById('projName').value.trim();
+  const url = document.getElementById('projUrl').value.trim();
+  const desc = document.getElementById('projDesc').value.trim();
+  const checked = [...document.querySelectorAll('.preset-check:checked')].map(c => c.value);
+
+  if (!name || !url) { showToast('请填写名称和URL'); return; }
+
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, url, description: desc })
+  });
+
+  if (!res.ok) { showToast('创建失败'); return; }
+  const data = await res.json();
+
+  // 添加选中的分辨率配置
+  if (checked.length > 0) {
+    const resolutions = DEFAULT_RESOLUTIONS.filter(r => checked.includes(`${r.width}x${r.height}`));
+    for (const res_cfg of resolutions) {
+      await fetch(`/api/projects/${data.id}/configs`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ width: res_cfg.width, height: res_cfg.height, device_scale: res_cfg.device_scale, browser: 'chromium' })
+      });
+    }
+  }
+
+  closeModal('createModal');
+  location.reload();
+}
+
+async function deleteProject(projectId) {
+  if (!confirm('确认删除此项目及所有测试记录？')) return;
+  await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+  location.reload();
+}
+</script>
+{% endblock %}

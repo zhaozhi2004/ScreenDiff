@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>调试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #4ade80; }
+        h2 { color: #60a5fa; margin-top: 30px; }
+        .card { background: #16213e; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .error { color: #f87171; }
+        .success { color: #4ade80; }
+        img { max-width: 300px; border: 2px solid #333; margin: 10px; }
+        .img-container { display: flex; flex-wrap: wrap; gap: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+        th { background: #0f3460; }
+    </style>
+</head>
+<body>
+    <h1>兼容性测试平台 - 调试页面</h1>
+    
+    <h2>1. 检查 API 状态</h2>
+    <div id="api-status" class="card">检查中...</div>
+    
+    <h2>2. 测试截图路由</h2>
+    <div id="screenshot-test" class="card">
+        <p>截图 ID=2: <span id="s2-status">检查中...</span></p>
+        <img id="img-s2" style="display:none">
+        <p>截图 ID=4: <span id="s4-status">检查中...</span></p>
+        <img id="img-s4" style="display:none">
+    </div>
+    
+    <h2>3. 测试差异图路由</h2>
+    <div id="diff-test" class="card">
+        <p>差异图: <span id="diff-status">检查中...</span></p>
+        <img id="img-diff" style="display:none">
+    </div>
+    
+    <h2>4. 所有 Test Runs</h2>
+    <div id="runs-table" class="card">加载中...</div>
+    
+    <script>
+        // 检查 API 状态
+        fetch('/api/test-runs/2')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('api-status').innerHTML = 
+                    '<span class="success">API 正常</span><pre>' + 
+                    JSON.stringify(data, null, 2) + '</pre>';
+                
+                // 测试截图加载
+                const img2 = document.getElementById('img-s2');
+                img2.src = '/screenshots/' + data.screenshot_path;
+                img2.style.display = 'block';
+                img2.onload = () => {
+                    document.getElementById('s2-status').innerHTML = '<span class="success">加载成功</span>';
+                };
+                img2.onerror = () => {
+                    document.getElementById('s2-status').innerHTML = '<span class="error">加载失败</span>';
+                };
+            })
+            .catch(e => {
+                document.getElementById('api-status').innerHTML = 
+                    '<span class="error">API 错误: ' + e + '</span>';
+            });
+        
+        fetch('/api/test-runs/4')
+            .then(r => r.json())
+            .then(data => {
+                const img4 = document.getElementById('img-s4');
+                img4.src = '/screenshots/' + data.screenshot_path;
+                img4.style.display = 'block';
+                img4.onload = () => {
+                    document.getElementById('s4-status').innerHTML = '<span class="success">加载成功</span>';
+                };
+                img4.onerror = () => {
+                    document.getElementById('s4-status').innerHTML = '<span class="error">加载失败</span>';
+                };
+            });
+        
+        // 测试差异图
+        fetch('/api/compare?run_a=2&run_b=4')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('diff-test').innerHTML +=
+                    '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                if (data.diff_path) {
+                    const diffImg = document.getElementById('img-diff');
+                    diffImg.src = '/diffs/' + data.diff_path;
+                    diffImg.style.display = 'block';
+                    diffImg.onload = () => {
+                        document.getElementById('diff-status').innerHTML = '<span class="success">加载成功</span>';
+                    };
+                    diffImg.onerror = () => {
+                        document.getElementById('diff-status').innerHTML = '<span class="error">加载失败</span>';
+                    };
+                }
+            });
+        
+        // 加载所有 runs（直接测试已知 ID）
+        document.getElementById('runs-table').innerHTML = '测试已知截图...';
+        
+        const testIds = [2, 3, 4, 5];
+        const runsData = [];
+        
+        testIds.forEach(id => {
+            fetch('/api/test-runs/' + id)
+                .then(r => r.json())
+                .then(data => {
+                    runsData.push(data);
+                    document.getElementById('runs-table').innerHTML = 
+                        '<table><tr><th>ID</th><th>分辨率</th><th>浏览器</th><th>截图路径</th><th>状态</th></tr>' +
+                        runsData.map(r => '<tr><td>' + r.id + '</td><td>' + r.resolution + '</td><td>' + r.browser + '</td><td>' + r.screenshot_path + '</td><td>' + r.status + '</td></tr>').join('') +
+                        '</table>';
+                });
+        });
+    </script>
+</body>
+</html>

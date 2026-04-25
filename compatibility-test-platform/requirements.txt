@@ -1,0 +1,11 @@
+Flask==3.0.0
+Flask-SocketIO==5.3.6
+Flask-SQLAlchemy==3.1.1
+playwright==1.41.0
+opencv-python==4.9.0.80
+numpy==1.26.3
+Pillow==10.2.0
+reportlab==4.0.9
+python-dotenv==1.0.0
+gevent==23.9.1
+greenlet==3.0.3

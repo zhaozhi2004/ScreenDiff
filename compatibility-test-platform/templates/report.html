@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}测试报告 — {{ project.name }}{% endblock %}
+{% block page_title %}{{ project.name }} <span class="text-muted" style="font-size:14px; font-weight:400;">测试报告</span>{% endblock %}
+
+{% block actions %}
+<div style="display:flex; gap:8px;">
+  <a href="/api/report/{{ project.id }}?format=html" class="btn btn-outline" target="_blank">📥 下载 HTML</a>
+  <a href="/api/report/{{ project.id }}?format=pdf" class="btn btn-outline">📥 下载 PDF</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="content-area">
+
+  <!-- 统计卡片 -->
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-num">{{ runs|length }}</div>
+      <div class="stat-label">测试记录</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" style="color:#10B981">{{ runs|selectattr('status', 'eq', 'completed')|list|length }}</div>
+      <div class="stat-label">通过</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" style="color:#EF4444">{{ runs|selectattr('status', 'eq', 'failed')|list|length }}</div>
+      <div class="stat-label">失败</div>
+    </div>
+    <div class="stat-item">
+      {% set diffs = runs|selectattr('diff_score', 'ne', none)|list %}
+      {% if diffs %}
+      <div class="stat-num" style="color:#F59E0B">{{ (diffs|map(attribute='diff_score')|sum / diffs|length * 100)|round(2) }}%</div>
+      {% else %}
+      <div class="stat-num">—</div>
+      {% endif %}
+      <div class="stat-label">平均差异</div>
+    </div>
+  </div>
+
+  <!-- 差异矩阵 -->
+  {% set res_list = runs|map(attribute='get_resolution')|unique|list|sort %}
+  {% set browser_list = runs|map(attribute='get_browser')|unique|list|sort %}
+  <div class="section-title">分辨率 × 浏览器 差异矩阵</div>
+  <div class="matrix-wrap">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>分辨率</th>
+          {% for browser in browser_list %}
+          <th>{{ browser|upper }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for res in res_list %}
+        <tr>
+          <td class="mono"><strong>{{ res }}</strong></td>
+          {% for browser in browser_list %}
+          {% set run = runs|selectattr('get_resolution', 'eq', res)|selectattr('get_browser', 'eq', browser)|first %}
+          <td>
+            {% if run %}
+              {% if run.status == 'completed' %}
+              <span class="diff-cell pass">
+                {{ (run.diff_score * 100)|round(2) if run.diff_score is not none else '—' }}%
+              </span>
+              {% elif run.status == 'failed' %}
+              <span class="diff-cell fail">失败</span>
+              {% else %}
+              <span class="diff-cell pending">{{ run.status }}</span>
+              {% endif %}
+            {% else %}
+            <span class="diff-cell none">—</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 详细记录 -->
+  <div class="section-title" style="margin-top:32px;">全部测试记录</div>
+  <div class="runs-table-wrap">
+    <table class="runs-table">
+      <thead>
+        <tr>
+          <th>#</th><th>分辨率</th><th>浏览器</th><th>状态</th>
+          <th>差异率</th><th>基线</th><th>差异图</th><th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td class="mono text-muted">{{ run.id }}</td>
+          <td class="mono">{{ run.get_resolution() }}</td>
+          <td><span class="browser-badge">{{ run.get_browser()[:2].upper() }}</span></td>
+          <td>
+            {% if run.status == 'completed' %}<span class="badge badge-pass">通过</span>
+            {% elif run.status == 'failed' %}<span class="badge badge-fail">失败</span>
+            {% else %}<span class="badge badge-pending">{{ run.status }}</span>{% endif %}
+          </td>
+          <td>
+            {% if run.diff_score is not none %}
+            <span class="diff-value {% if run.diff_score > 0.05 %}high{% elif run.diff_score > 0.01 %}mid{% endif %}">
+              {{ (run.diff_score * 100)|round(2) }}%
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{% if run.baseline_path %}✅{% else %}❌{% endif %}</td>
+          <td>{% if run.diff_path %}<a href="/diffs/{{ run.diff_path|diff_rel }}" target="_blank" class="btn btn-xs btn-ghost">🔴</a>{% else %}—{% endif %}</td>
+          <td class="mono text-muted" style="font-size:11px;">{{ run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if not runs %}
+  <div class="empty-state">
+    <div class="empty-title">暂无测试报告</div>
+    <div class="empty-desc">运行测试后即可生成报告</div>
+    <button class="btn btn-primary" onclick="location.href='/project/{{ project.id }}'">去运行测试</button>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
